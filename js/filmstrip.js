@@ -2,7 +2,8 @@
    - 무대(.stage)는 scroll-snap 가로 트랙. 페이지 하나 = 필름 프레임 하나
    - 휠 한 번 / ←→ / PageUp·PageDown / Space = 한 페이지 이동 (이동 중 700ms 입력 무시)
      패널 안에 세로 스크롤이 남아 있으면 그 스크롤을 먼저 처리하고, 끝에 닿았을 때만 이동
-   - 767px 이하에서는 휠 변환 없이 스와이프(네이티브 scroll-snap)만
+   - 767px 이하에서는 휠 변환 없이 스와이프만. 가로 넘김은 터치 이벤트로 직접 처리(방향 잠금 · 한 장씩 · 끝에서 저항),
+     좌우 가장자리 ‹ › 버튼, 아래 점 표시, 처음 들어왔을 때 1회 스와이프 안내
    - URL 해시로 페이지 지정 (#profile, #roguetower ...), 뒤로가기 지원
    - 테이프는 Web Animations(translate3d)로 이동. 페이지가 넘어갈 때 5배로 빨라졌다가 감속, 탭이 숨겨지면 정지
    - 영상은 현재 페이지(큰 컷) · 열린 상세 화면에서만 재생 (webm → mp4, 안 되면 포스터)
@@ -52,6 +53,10 @@
   var sceneName = document.getElementById("sceneName");
   var sceneIndex = document.getElementById("sceneIndex");
   document.getElementById("sceneTotal").textContent = pad(pages.length);
+  var sceneDots = document.getElementById("sceneDots");
+  var dots = scenes.map(function () { return sceneDots.appendChild(document.createElement("i")); });
+  var prevBtn = document.getElementById("swipePrev");
+  var nextBtn = document.getElementById("swipeNext");
 
   var current = -1;
   var target = 0;          // 마지막으로 가라고 한 페이지 (연속 키 입력이 누적되게)
@@ -207,6 +212,9 @@
     });
     sceneNum.textContent = sceneIndex.textContent = scenes[i].num;
     sceneName.textContent = scenes[i].title;
+    dots.forEach(function (d, n) { d.classList.toggle("is-on", n === i); });
+    prevBtn.hidden = i === 0;
+    nextBtn.hidden = i === pages.length - 1;
     if (!first && !reduceMotion) boostTape();
     syncMedia();
 
@@ -287,6 +295,151 @@
     scrollEndTimer = setTimeout(onScrollEnd, 150); // scrollend 미지원 브라우저 대비
   }, { passive: true });
   stage.addEventListener("scrollend", function () { clearTimeout(scrollEndTimer); onScrollEnd(); });
+
+  /* ---------- 모바일 스와이프 (767px 이하, 터치) ----------
+     브라우저는 세로 스크롤만 맡고(CSS touch-action: pan-y), 가로 넘김은 여기서 직접 처리한다
+     - 방향 잠금: 가로 이동 > 세로 × 1.3 이면 페이지 넘김. 브라우저가 세로 스크롤을 시작했으면(취소 불가) 손대지 않음.
+       그 사이(대각선)는 둘 다 움직이지 않고 더 움직일 때까지 기다린다
+     - 끄는 동안 페이지가 손가락을 따라오고(--drag), 놓으면 이전/다음 한 장으로만 이동 (빠르게 튕겨도 한 장)
+     - 첫 페이지에서 오른쪽, 마지막 페이지에서 왼쪽으로 끌면 저항이 걸렸다가 돌아옴
+     - 이동할 때는 무대를 새 페이지로 바로 스크롤하고, 그만큼 --drag를 보정한 뒤 0으로 미끄러뜨린다 */
+  var SWIPE_SLOP = 10;    // 이만큼 움직여야 방향을 정함 (px)
+  var SWIPE_RATIO = 1.3;  // 가로 > 세로 × 1.3 이면 가로
+  var FLICK_V = 0.35;     // 이보다 빠르게 튕기면 거리와 상관없이 넘김 (px/ms)
+  var COMMIT = 0.2;       // 페이지 폭의 20% 넘게 끌면 넘김
+  var touch = null, settleTimer = 0;
+
+  function setDrag(x) { stage.style.setProperty("--drag", x + "px"); }
+  function dragNow() { return parseFloat(getComputedStyle(pages[0]).translate) || 0; } // 미끄러지는 중 · 넘겨보기 중인 위치
+  function pageStep() { var g = geo || measure(); return g.centers.length > 1 ? g.centers[1] - g.centers[0] : stage.clientWidth; }
+  function resist(x) { return (x < 0 ? -1 : 1) * 64 * (1 - Math.exp(-Math.abs(x) / 160)); } // 최대 64px까지 점점 무거워짐
+
+  function settle(from) {
+    clearTimeout(settleTimer);
+    stage.classList.remove("is-settling");
+    if (reduceMotion || Math.abs(from) < 1) { setDrag(0); return; }
+    setDrag(from);
+    void stage.offsetWidth; // from 위치를 먼저 그린 뒤 0으로 전환
+    stage.classList.add("is-settling");
+    setDrag(0);
+    settleTimer = setTimeout(function () { stage.classList.remove("is-settling"); }, 360);
+  }
+
+  function startTouch(e) {
+    if (!mobile.matches || openSheet || e.touches.length > 1) { if (touch) settle(touch.shown); touch = null; return; }
+    var t = e.touches[0];
+    var base = stage.classList.contains("is-settling") || stage.classList.contains("is-peeking") ? dragNow() : 0;
+    clearTimeout(settleTimer);
+    stage.classList.remove("is-settling", "is-peeking");
+    setDrag(base);
+    touch = { x: t.clientX, y: t.clientY, base: base, shown: base, axis: "", samples: [] };
+  }
+
+  function moveTouch(e) {
+    if (!touch) return;
+    var t = e.touches[0], dx = t.clientX - touch.x, dy = t.clientY - touch.y;
+    if (!touch.axis) {
+      var ax = Math.abs(dx), ay = Math.abs(dy);
+      if (!e.cancelable || (ay > SWIPE_SLOP && ay >= ax)) touch.axis = "y";
+      else if (ax > SWIPE_SLOP && ax > ay * SWIPE_RATIO) touch.axis = "x";
+      if (touch.axis !== "x") return;
+      touch.x = t.clientX; // 잠긴 지점부터 따라오게 (갑자기 튀지 않게)
+      dx = 0;
+      hideCoach();
+    }
+    if (touch.axis !== "x") return;
+    if (e.cancelable) e.preventDefault(); // pan-y를 모르는 브라우저에서도 세로로 같이 움직이지 않게
+    var x = touch.base + dx, w = pageStep();
+    if ((x > 0 && current === 0) || (x < 0 && current === pages.length - 1)) x = resist(x);
+    else x = Math.max(-w, Math.min(w, x));
+    touch.shown = x;
+    setDrag(x);
+    touch.samples.push([t.clientX, e.timeStamp]);
+    while (touch.samples.length > 2 && e.timeStamp - touch.samples[0][1] > 100) touch.samples.shift();
+  }
+
+  function endTouch(e) {
+    if (!touch) return;
+    var tc = touch;
+    touch = null;
+    if (tc.axis !== "x" || e.type === "touchcancel") { settle(tc.shown); return; }
+    var s = tc.samples, v = 0;
+    if (s.length > 1 && s[s.length - 1][1] > s[0][1]) v = (s[s.length - 1][0] - s[0][0]) / (s[s.length - 1][1] - s[0][1]);
+    var dir = 0;
+    if (Math.abs(v) > FLICK_V) dir = v < 0 ? 1 : -1;
+    else if (Math.abs(tc.shown) > pageStep() * COMMIT) dir = tc.shown < 0 ? 1 : -1;
+    var to = current + dir;
+    if (!dir || to < 0 || to >= pages.length) { settle(tc.shown); return; }
+    var left = leftFor(to);
+    var from = left - stage.scrollLeft + tc.shown; // 스크롤이 바로 옮겨진 만큼 페이지를 되돌려 두면 화면은 그대로
+    target = to;
+    autoScrolling = false;
+    stage.scrollTo({ left: left, behavior: "auto" });
+    setCurrent(to);
+    settle(from);
+  }
+  // 가장자리 ‹ › 버튼 위에서 시작한 스와이프도 넘어가게 (밀면 버튼은 눌리지 않음)
+  [stage, prevBtn, nextBtn].forEach(function (el) {
+    el.addEventListener("touchstart", startTouch, { passive: true });
+    el.addEventListener("touchmove", moveTouch, { passive: false });
+    el.addEventListener("touchend", endTouch);
+    el.addEventListener("touchcancel", endTouch);
+  });
+
+  /* 좌우 가장자리 ‹ › 버튼 */
+  prevBtn.addEventListener("click", function () { hideCoach(); step(-1); });
+  nextBtn.addEventListener("click", function () { hideCoach(); step(1); });
+
+  /* ---------- 처음 들어왔을 때 스와이프 안내 (모바일, 1회) ----------
+     로드 1초 뒤 아래쪽 말풍선(손가락이 오른쪽 → 왼쪽으로 2회) + 현재 패널을 왼쪽으로 40px 살짝 넘겨보기.
+     스와이프 · 탭 · 4초 뒤 사라지고, 본 적이 있으면(localStorage) 다시 띄우지 않는다.
+     떠 있는 동안 ▼ SCROLL 힌트는 숨김 (body.is-coaching). 움직임 줄이기면 문구만 */
+  var COACH_KEY = "film.swipeCoachSeen";
+  var COACH_HAND = '<span class="coach-hand" aria-hidden="true"><svg viewBox="0 0 24 24">' +
+    '<path d="M22 14a8 8 0 0 1-8 8"/><path d="M18 11v-1a2 2 0 0 0-4 0"/><path d="M14 10V9a2 2 0 0 0-4 0v1"/>' +
+    '<path d="M10 9.5V4a2 2 0 0 0-4 0v10"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>' +
+    "</svg></span>";
+  var coach = null, coachStartTimer = 0, coachHideTimer = 0;
+  function coachSeen() { try { return localStorage.getItem(COACH_KEY) === "1"; } catch (err) { return false; } }
+  function markCoachSeen() { try { localStorage.setItem(COACH_KEY, "1"); } catch (err) { /* 저장이 막혀도 안내는 정상 동작 */ } }
+
+  function showCoach() {
+    if (!mobile.matches || openSheet || pages.length < 2 || coachSeen()) return;
+    markCoachSeen();
+    coach = document.createElement("div");
+    coach.className = "swipe-coach";
+    coach.setAttribute("aria-hidden", "true"); // 화면 읽기는 ‹ › 버튼 이름으로 안내
+    coach.innerHTML = (reduceMotion ? "" : COACH_HAND) + "<span>← 옆으로 넘겨서 보기 →</span>";
+    document.body.appendChild(coach);
+    document.body.classList.add("is-coaching");
+    void coach.offsetWidth;
+    coach.classList.add("is-on");
+    if (!reduceMotion) {
+      stage.style.setProperty("--peek", (current < pages.length - 1 ? -40 : 40) + "px"); // 마지막 페이지면 이전 쪽으로
+      stage.classList.add("is-peeking");
+    }
+    coachHideTimer = setTimeout(hideCoach, 4000);
+    document.addEventListener("touchstart", hideCoach, { capture: true, passive: true });
+    document.addEventListener("pointerdown", hideCoach, true);
+  }
+  // 안내가 뜨기 전에 이미 넘겼으면 띄우지 않음
+  function hideCoach() {
+    clearTimeout(coachStartTimer);
+    if (!coach) { if (mobile.matches) markCoachSeen(); return; }
+    var c = coach;
+    coach = null;
+    clearTimeout(coachHideTimer);
+    document.removeEventListener("touchstart", hideCoach, { capture: true });
+    document.removeEventListener("pointerdown", hideCoach, true);
+    document.body.classList.remove("is-coaching");
+    c.classList.remove("is-on");
+    setTimeout(function () { c.remove(); }, reduceMotion ? 0 : 320);
+  }
+  stage.addEventListener("animationend", function (e) {
+    if (e.animationName === "swipe-peek") stage.classList.remove("is-peeking");
+  });
+  // 문서가 준비된 뒤 1초 (load는 영상 · 이미지까지 기다려 느린 회선에서 한참 늦어지므로 쓰지 않음)
+  coachStartTimer = setTimeout(showCoach, 1000);
 
   /* ---------- 패널 안 세로 스크롤이 남았는지 ---------- */
   function scrollableInside(el, page, dy) {
@@ -556,7 +709,10 @@
     }
     queueHint(page);
   });
-  if (mobile.addEventListener) mobile.addEventListener("change", function () { pages.forEach(queueHint); });
+  if (mobile.addEventListener) mobile.addEventListener("change", function () {
+    pages.forEach(queueHint);
+    if (!mobile.matches) { touch = null; hideCoach(); stage.classList.remove("is-settling", "is-peeking"); setDrag(0); }
+  });
 
   var startId = decodeURIComponent(location.hash.slice(1));
   var start = sheets[startId] ? ownerOf(startId) : indexFromHash();

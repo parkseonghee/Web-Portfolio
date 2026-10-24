@@ -805,7 +805,11 @@
 
 <!-- ===== 위치 표시 (아래 테이프 위) ===== -->
 <p class="scene-label" aria-live="polite"><span class="scene-mark" aria-hidden="true">■</span> SCENE <span id="sceneNum">01</span> · <span id="sceneName">PROFILE</span></p>
-<p class="scene-count" aria-hidden="true"><span id="sceneIndex">01</span> / <span id="sceneTotal">10</span></p>
+<p class="scene-count" aria-hidden="true"><span class="scene-dots" id="sceneDots"></span><span id="sceneIndex">01</span> / <span id="sceneTotal">10</span></p>
+
+<!-- ===== 모바일: 패널 좌우 가장자리 이전 / 다음 버튼 ===== -->
+<button class="swipe-arrow swipe-prev" type="button" id="swipePrev" aria-label="이전 페이지"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+<button class="swipe-arrow swipe-next" type="button" id="swipeNext" aria-label="다음 페이지"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
 
 <script src="js/records.js"></script>
 <script src="js/filmrecords.js"></script>
