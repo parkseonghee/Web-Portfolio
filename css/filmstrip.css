@@ -986,3 +986,37 @@ code { font-family: var(--mono); font-size: .9em; color: var(--accent); }
   .stage.is-peeking .page { animation: none; }
   .coach-hand { display: none; } /* 손가락 없이 문구만 */
 }
+
+/* ---------- 인쇄 · PDF 저장: 가로 트랙을 풀어 페이지마다 한 장씩, 프로젝트 상세 시트는 그 프로젝트 페이지 바로 뒤에 ----------
+   assets/portfolio_parkseonghee.pdf 는 이 규칙으로 크롬에서 인쇄해 만든다
+   순서: body를 세로 flex로 만들고 무대(.stage)를 display: contents로 풀어 페이지 · 시트를 같은 줄에 세운 뒤 order로 끼워 넣음 */
+@media print {
+  @page { size: 1440px 900px; margin: 0; }
+  :root { --tape-h: 0px; --stage-h: 900px; --page-w: 1440px; }
+  html, body { height: auto; overflow: visible; }
+  body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  body::before, .tv-on, .tape, .tape-index, .index-btn, .index-menu, .scene-label, .scene-count,
+  .scene-dots, .swipe-arrow, .swipe-coach, .view-hint, .sheet-close, .sheet-foot, .sheet::backdrop { display: none !important; }
+  body { display: flex; flex-direction: column; }
+  .stage { display: contents; }
+  .page { flex: none; height: 900px; opacity: 1 !important; break-after: page; break-inside: avoid; translate: none; animation: none; }
+  .page[data-scene="roguetower"] { order: 1; }
+  #roguetower-detail { order: 2; }
+  .page[data-scene="zoojack"] { order: 3; }
+  #zoojack-detail { order: 4; }
+  .page[data-scene="zoojack"] ~ .page { order: 5; }
+  .page::before, .page::after { display: none; }
+  .page-in { overflow: hidden; }
+  .page-in > * { zoom: 1 !important; }
+  .profile { animation: none; }
+  .cut-media video { display: none; }
+  .sheet { display: block !important; flex: none; position: static; inset: auto; overflow: visible; animation: none; break-after: page; }
+  .sheet-in { zoom: .9; padding-top: 16px; } /* 히어로 + 첫 컷이 한 장에 들어가게 조금 줄임 */
+  .sheet .shot img, .sheet .shot video { max-height: 640px; }
+  /* 제목(히어로)만 한 장에 남지 않게: 히어로를 낮추고 첫 컷과 붙여 둠 (첫 컷은 넘치면 쪽 사이에서 나뉨) */
+  .sheet-hero { min-height: 0; padding-top: 32px; break-after: avoid; }
+  .sheet-block { break-inside: avoid; }
+  .sheet-hero + .sheet-block { break-inside: auto; }
+  .sheet-hero + .sheet-block .split { grid-template-columns: repeat(3, minmax(0, 1fr)); } /* 첫 컷의 영상 + 코드 2장을 세로로 쌓지 않고 가로로 */
+  .sheet-hero + .sheet-block .split .stack { display: contents; }
+}
