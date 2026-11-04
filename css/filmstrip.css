@@ -379,16 +379,14 @@ code { font-family: var(--mono); font-size: .9em; color: var(--accent); }
 /* 카드 높이는 내용보다 작아지지 않게(1fr = minmax(auto, 1fr)) → 글자가 옆 카드와 겹치지 않음 */
 .game-list { flex: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 8px; align-content: start; }
 .game { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; padding: calc(var(--space) * .6) 12px; border: 1px solid rgba(255, 255, 255, .15); min-width: 0; }
-.game.is-top { border-color: rgba(242, 177, 52, .55); }
 .game-rank { font-family: var(--mono); font-size: clamp(15px, 1.25vw, 20px); font-weight: 700; color: rgba(255, 255, 255, .45); }
-.game.is-top .game-rank { color: var(--accent); }
 .game-main { min-width: 0; display: grid; gap: 3px; align-content: start; }
 .game-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 .game-name { margin: 0; font-size: clamp(13.5px, min(1.1vw, 2svh), 17px); }
 .game-name a { text-decoration: none; }
 .game-name a:hover { color: var(--accent); }
+.game-head .pill { margin-left: 0; }
 .game-genre { font-family: var(--mono); font-size: var(--fs-xs); color: rgba(255, 255, 255, .6); }
-.game-genre.is-rogue { color: var(--accent); }
 .game-time { font-family: var(--mono); font-size: var(--fs-xs); color: rgba(255, 255, 255, .7); }
 .game-bar { display: block; height: 4px; background: rgba(255, 255, 255, .1); }
 .game-bar span { display: block; height: 100%; background: var(--accent); }

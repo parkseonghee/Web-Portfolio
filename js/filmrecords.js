@@ -52,26 +52,29 @@
       var q = search.value.trim().toLowerCase();
       var max = games.reduce(function (m, g) { return Math.max(m, toMinutes(g[2])); }, 1);
       var matched = [];
-      games.forEach(function (g, i) {
+      var rank = 0; // 배지가 있는 고정 항목은 순위에서 뺀다
+      games.forEach(function (g) {
+        var n = g[5] ? 0 : ++rank; // 검색과 상관없이 순위는 전체 목록 기준
         if (q && (g[0] + " " + g[3]).toLowerCase().indexOf(q) === -1) return;
-        matched.push([g, i]);
+        matched.push([g, n]);
       });
       var pages = Math.max(1, Math.ceil(matched.length / PAGE_SIZE));
       page = Math.min(page, pages - 1);
 
       list.innerHTML = matched.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(function (item) {
-        var g = item[0], i = item[1];
+        var g = item[0], n = item[1];
         var name = g[1]
           ? '<a href="' + esc(g[1]) + '" target="_blank" rel="noopener noreferrer">' + esc(g[0]) + " ↗</a>"
           : esc(g[0]);
         var bar = platform === "pc"
           ? '<span class="game-bar" aria-hidden="true"><span style="width:' + Math.max(2, toMinutes(g[2]) / max * 100).toFixed(1) + '%"></span></span>'
           : "";
-        return '<li class="game' + (i < 3 ? " is-top" : "") + '">' +
-          '<span class="game-rank">' + (i + 1) + "</span>" +
+        return '<li class="game">' +
+          '<span class="game-rank">' + (n || "") + "</span>" +
           '<div class="game-main">' +
             '<div class="game-head"><h3 class="game-name">' + name + "</h3>" +
-              '<span class="game-genre' + (isRoguelike(g[3]) ? " is-rogue" : "") + '">' + esc(g[3]) + "</span></div>" +
+              (g[5] ? '<span class="pill">' + esc(g[5]) + "</span>" : "") +
+              '<span class="game-genre">' + esc(g[3]) + "</span></div>" +
             '<p class="game-time">' + esc(g[2]) + "</p>" + bar +
             '<p class="game-desc" title="' + esc(g[4]) + '">' + esc(g[4]) + "</p>" +
           "</div></li>";
